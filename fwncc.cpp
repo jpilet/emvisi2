@@ -46,8 +46,8 @@ FNcc::~FNcc() {
 }
 
 void FNcc::setModel(const cv::Mat b, const cv::Mat mask) {
+        this->mask = mask;
 	if (!mask.empty()) {
-		this->mask = mask;
 		mask_integral = cv::Mat(mask.rows+1, mask.cols+1, CV_32SC1);
                 mask_integral = 0;
 		for (int y=0; y<mask.rows;y++) {
@@ -63,7 +63,7 @@ void FNcc::setModel(const cv::Mat b, const cv::Mat mask) {
 	this->b = b;
 
 	assert(b.channels() == 1);
-	assert(b.depth() == 8);
+	assert(b.depth() == CV_8U);
 
 	width = b.cols+1;
 	height = b.rows+1;
@@ -107,7 +107,7 @@ void FNcc::setImage(cv::Mat a) {
 
 	assert(a.cols+1 == width && a.rows+1 == height);
 	assert(a.channels()==1);
-	assert(a.depth() == 8);
+	assert(a.depth() == CV_8U);
 
 	CSum *p= integral + width + 1;
 
