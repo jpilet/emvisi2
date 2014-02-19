@@ -26,8 +26,9 @@
  * Packaged on Nov 2008
  */
 #include <iostream>
-#include <cv.h>
-#include <highgui.h>
+#include <opencv2/opencv.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/highgui.hpp>
 #include "emvisi2.h"
 #include "growmat.h"
 
@@ -37,6 +38,7 @@
 //  - edit the Makefile
 
 using namespace std;
+using namespace cv;
 
 extern const float ncc_proba_h[256];
 extern const float ncc_proba_v[256];
@@ -80,7 +82,7 @@ static void a_save(const char *fn, cv::Mat im) {
         tmp *= -1;
 	scale_save(fn,tmp, -1, -1);
 }
-static void save_proba(const char *fn, cv::Mat im) {
+void save_proba(const char *fn, cv::Mat im) {
 	char str[1024];
 	snprintf(str,1024,"log_%s",fn);
 	scale_save(fn, im, -1, -1);
@@ -148,7 +150,7 @@ void EMVisi2::iterate()
 						po+x, (vpo?vpo+x:0));
 				if (save_images)
 					likelihood += log(l);
-				assert(finite(po[x]));
+				assert(!isnan(po[x]));
 			} else
 				po[x]=0;
 		}
@@ -205,7 +207,7 @@ float EMVisi2::process_pixel(const float *rgb, const float *frgb, const float dl
 	for (int i=0; i<NB_VISI_GAUSSIANS; i++) {
 		*r = *w++ * visi_g[i]._proba(frgb) * dl * nccv;
 
-		assert(finite(*r));
+		assert(!isnan(*r));
 		if (*r<0) *r = 0;
 		if (*r>(1-epsilon)) *r= 1-epsilon;
 		assert(*r >=0);
@@ -218,7 +220,7 @@ float EMVisi2::process_pixel(const float *rgb, const float *frgb, const float dl
 	for (int i=0; i<NB_OCCL_GAUSSIANS; i++) {
 		*r = *w++ * occl_g[i]._proba(rgb) * ncch;
 		if (*r<epsilon) *r = epsilon;
-		assert(finite(*r));
+		assert(!isnan(*r));
 		assert(*r >=0);
 		assert(*r <1);
 		sum_resp += *r;
@@ -258,7 +260,7 @@ bool EMVisi2::init() {
 	return true;
 }
 
-int EMVisi2::setModel(const cv::Mat im1, const cv::Mat *mask)
+int EMVisi2::setModel(const cv::Mat im1, const cv::Mat mask)
 {
 	if (proba.empty()) {
 		dL = cv::Mat(im1.size(), CV_32FC1);
@@ -273,17 +275,16 @@ int EMVisi2::setModel(const cv::Mat im1, const cv::Mat *mask)
 	}
 
 	if (im1.channels() > 1) {
-		cv::Mat green1 = cv::Mat(im1.size(), im1.type());
-                cv::split(im1, 0, green1, 0,0);
-		fncc.setModel(green1, mask);
+		cv::Mat gray;
+                cv::cvtColor(im1, gray, COLOR_RGB2GRAY);
+		fncc.setModel(gray, mask);
 	} else {
 		fncc.setModel(im1, mask);
 	}
 
-        im1.convertTo(im1f);
+        im1.convertTo(im1f, im1f.type());
 
-	if (mask) 
-		this->mask = *mask;
+        this->mask = mask;
 	return 0;
 }
 
@@ -293,20 +294,19 @@ int EMVisi2::setTarget(cv::Mat target)
 	iteration=0;
 
 	if (target.depth() != CV_32F) {
-		_im2 = cv::Mat(cvGetSize(target), IPL_DEPTH_32F, target->nChannels);
-		cvCvtScale(target,_im2);
+                target.convertTo(_im2, CV_MAKETYPE(CV_32F, target.channels()));
 		im2 = _im2;
 	}
 
-	assert(ncc.is_valid());
+	assert(!ncc.empty());
 	cv::Mat green2;
-	if (im2->nChannels>1) {
-		green2 = cv::Mat(cvGetSize(target), target->depth, 1);
-		cvSplit(target, 0, green2, 0,0);
+	if (im2.channels()>1) {
+		green2 = cv::Mat(target.size(), CV_MAKETYPE(target.depth(), 1));
+                cv::cvtColor(target, green2, COLOR_RGB2GRAY);
 		fncc.setImage(green2);
 		fncc.computeNcc(ncc_size, ncc, sum);
 	} else {
-		green2.attach(const_cast<IplImage *>(im2),false);
+		green2 = im2;
 		fncc.setImage(green2);
 		fncc.computeNcc(ncc_size, ncc, sum);
 	}
@@ -354,12 +354,12 @@ int EMVisi2::setTarget(cv::Mat target)
 			}
 		}
 	}
-	int n=im1f.width()*im1f.channels();
-	for (int y=0;y<im1f.height();y++) {
-		float *a = (float *)im1f.roi_row(y); 
-		float *b = &CV_IMAGE_ELEM(im2, float, y, 0);
-		float *d = (float *)ratio.roi_row(y);
-		float *dl = (float *)dL.roi_row(y);
+	int n=im1f.cols*im1f.channels();
+	for (int y=0;y<im1f.rows;y++) {
+		float *a = im1f.ptr<float>(y);
+		float *b = im2.ptr<float>(y, 0);
+		float *d = ratio.ptr<float>(y);
+		float *dl = dL.ptr<float>(y);
 		for (int x=0;x<n; x+=3) {
 			int ia[3];
 			int ib[3];
@@ -404,7 +404,7 @@ typedef Graph<float, float, float> FGraph;
 */
 static double connected_regions(cv::Mat *mask, vector<CvConnectedComp> &regions)
 {
-	assert(mask->nChannels == 1);
+	assert(mask.channels() == 1);
 	assert(mask->depth == IPL_DEPTH_8U);
 
 	regions.clear();
@@ -413,10 +413,10 @@ static double connected_regions(cv::Mat *mask, vector<CvConnectedComp> &regions)
 	int region = 1;
 	double area = 0;
 
-	for (int y=0; y<mask->height; y++) {
+	for (int y=0; y<mask.rows; y++) {
 		unsigned char *m = &CV_IMAGE_ELEM(mask, unsigned char, y, 0);
 
-		for (int x=0; x<mask->width; x++) {
+		for (int x=0; x<mask.cols; x++) {
 			if (m[x]==0) {
 				CvConnectedComp conn;
 
@@ -441,7 +441,7 @@ static void display_err(char *e)
 
 
 void EMVisi2::smooth(float amount, float threshold) {
-	const IplImage *wa = proba;
+	const cv::Mat wa = proba;
 
 	// Threshold proba image
 	cv::Mat gc_mask(cvGetSize(proba), IPL_DEPTH_8U, 1);
@@ -463,8 +463,8 @@ void EMVisi2::smooth(float amount, float threshold) {
 				m[x]=0;
 				/*
 				if (x>0) m[x-1]=0;
-				if (x<proba->width-1) m[x+1]=0;
-				if (y<proba->height-1) m[x+mask.step()]=0;
+				if (x<proba.cols-1) m[x+1]=0;
+				if (y<proba.rows-1) m[x+mask.step()]=0;
 				if (y>0) m[x-mask.step()]=0;
 				*/
 				m[x-1]=0;
@@ -505,7 +505,7 @@ void EMVisi2::smooth(float amount, float threshold) {
 
 	// allocate the graph. Note: worst case memory scenario.
 	int n_nodes= gc_mask.width()*gc_mask.height();
-	int n_edges = 2*((wa->width)*(wa->height-1) + (wa->width-1)*wa->height);
+	int n_edges = 2*((wa.cols)*(wa.rows-1) + (wa.cols-1)*wa.rows);
 	FGraph *g = new FGraph(n_nodes, n_edges, display_err);
 	int *nodesid = new int[n_nodes];
 
@@ -655,44 +655,44 @@ bool NccHisto::saveHistogram(const char *filename)
 	return CvGrowMat::saveMat(&m, filename);
 }
 
-void NccHisto::getProba(const IplImage *ncc, IplImage *proba)
+void NccHisto::getProba(const cv::Mat ncc, cv::Mat proba)
 {
 	if (lut==0) loadHistogram();
 	assert(lut);
 	if (lut==0) return;
-	assert(ncc->nChannels==3);
-	assert(ncc->width == proba->width && ncc->height==proba->height);
-	assert(proba->nChannels==1);
+	assert(ncc.channels()==3);
+	assert(ncc.cols == proba.cols && ncc.rows==proba.rows);
+	assert(proba.channels()==1);
 
-	const int w=ncc->width;
-	const int h=ncc->height;
+	const int w=ncc.cols;
+	const int h=ncc.rows;
 
 	for (int y=0; y<h;y++) {
-		float *dst = &CV_IMAGE_ELEM(proba,float,y,0);
-		const float *src = &CV_IMAGE_ELEM(ncc,float,y,0);
+		float *dst = proba.ptr<float>(y);
+		const float *src = ncc.ptr<float>(y);
 		for (int x=0;x<w;x++) {
 			dst[x] = lut[lut_idx(src[x*3], src[x*3+1])];
 		}
 	}
 }
 
-void NccHisto::getProba(const IplImage *ncc, const IplImage *sumstdev, IplImage *proba)
+void NccHisto::getProba(const cv::Mat ncc, const cv::Mat sumstdev, cv::Mat proba)
 {
 	if (lut==0) loadHistogram();
 	assert(lut);
 	if (lut==0) return;
-	assert(ncc->nChannels==1);
-	assert(sumstdev->nChannels==1);
-	assert(ncc->width == proba->width && ncc->height==proba->height);
-	assert(proba->nChannels==1);
+	assert(ncc.channels()==1);
+	assert(sumstdev.channels()==1);
+	assert(ncc.cols == proba.cols && ncc.rows==proba.rows);
+	assert(proba.channels()==1);
 
-	const int w=ncc->width;
-	const int h=ncc->height;
+	const int w=ncc.cols;
+	const int h=ncc.rows;
 
 	for (int y=0; y<h;y++) {
-		float *dst = &CV_IMAGE_ELEM(proba,float,y,0);
-		const float *src = &CV_IMAGE_ELEM(ncc,float,y,0);
-		const float *sum = &CV_IMAGE_ELEM(sumstdev,float,y,0);
+		float *dst = proba.ptr<float>(y);
+		const float *src = ncc.ptr<float>(y);
+		const float *sum = sumstdev.ptr<float>(y);
 		for (int x=0;x<w;x++) {
 			dst[x] = lut[lut_idx(src[x], sum[x])];
 		}
@@ -713,113 +713,3 @@ void NccHisto::normalize(float bias)
 	for (int i=0; i<n; i++) lut[i] = (lut[i]+bias) / div;
 }
 
-#ifdef TEST_EMVISI
-
-#include <sys/time.h>
-
-class Timer {
-public:
-	Timer() { start(); }
-	void start() { gettimeofday(&s,0); }
-	double duration();
-private:
-	struct timeval s;
-};
-
-double Timer::duration() {
-	struct timeval end, dt;
-	gettimeofday(&end,0);
-	timersub(&end,&s, &dt);
-	return dt.tv_sec * 1000.0 + dt.tv_usec/1000.0;
-}
-
-void usage(char *str)
-{
-	cerr << "usage: " << str << " [-v] <background> <input frame> [<mask>]\n";
-	cerr << "	use -v for more verbosity and more intermediate images saved.\n";
-	exit(-1);
-}
-
-
-int main(int argc, char *argv[])
-{
-	EMVisi2 emv;
-	int nim=0;
-	IplImage *im[3] = {0,0,0};
-
-	// parse command line
-	for (int narg=1; narg<argc; ++narg) {
-		if (strcmp(argv[narg],"-v")==0) {
-			emv.save_images=true;
-		} else {
-			im[nim] = cvLoadImage(argv[narg], (nim==2 ? 0 : -1));
-			if (!im[nim]) {
-				cerr << argv[narg] << ": can't load image.\n";
-				exit(-2);
-			}
-			nim++;
-		}
-	}
-
-	IplImage *im1 = im[0];
-	IplImage *im2 = im[1];
-	IplImage *mask = im[2];
-
-	if (!im1 || !im2) usage(argv[0]);
-	
-	if ((im1->nChannels != im2->nChannels) || (im1->width != im2->width) ) {
-		cerr << "image format or size do not match.\n";
-		exit(-4);
-	}
-	int h = (im1->height < im2->height ? im1->height : im2->height);
-	im1->height=h;
-	im2->height=h;
-
-	Timer timer;
-	cout << "Initialization.. ";
-
-	// EMVisi2 setup
-	if (!emv.init()) {
-		cerr << "EMVisi2::init() failed.\n";
-		return -1;
-	}
-	emv.setModel(im1, mask);
-
-	cout << "done in " << timer.duration() << " ms.\n";
-
-	cout << "setTarget... ";
-	timer.start();
-
-	emv.setTarget(im2);
-
-	cout << "computed in " << timer.duration() << " ms.\n";
-
-	Timer iterations;
-
-	const int niter=16;
-	emv.run(niter, 0);
-
-	float it_duration = iterations.duration();
-
-#ifdef WITH_GRAPHCUT
-	emv.smooth(2.4, 0.001);
-	float gc_duration = iterations.duration() - it_duration;
-#endif
-
-	cout << niter << " iterations computed in " << it_duration << " ms. (avg " 
-		<< it_duration / (float)niter << " ms per iteration)\n";
-#ifdef WITH_GRAPHCUT
-	cout << "graph cut computed in " << gc_duration << " ms.\n";
-#endif
-
-	float duration = timer.duration();
-	cout << "       frame computed in " << duration << " ms ("
-		<< (im1->width*im1->height)/duration << " K pix/sec).\n";
-
-	save_proba("final_proba.png",emv.proba);
-	cvReleaseImage(&im1);
-	cvReleaseImage(&im2);
-	cvReleaseImage(&mask);
-	return 0;
-}
-#endif

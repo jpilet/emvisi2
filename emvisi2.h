@@ -40,8 +40,8 @@ public:
 	bool loadHistogram(const char *filename = "proba.mat");
 	bool saveHistogram(const char *filename);
 	void setHistogram(const float *histo);
-	void getProba(const IplImage *ncc, IplImage *proba);
-	void getProba(const IplImage *ncc, const IplImage *sumstdev, IplImage *proba);
+	void getProba(const cv::Mat ncc, cv::Mat proba);
+	void getProba(const cv::Mat ncc, const cv::Mat sumstdev, cv::Mat proba);
 
 	void initEmpty();
 	void addElem(float corr, float var, float w)
@@ -88,8 +88,8 @@ public:
 	EMVisi2();
 
 	bool init();
-        int setModel(const cv::Mat im1, const cv::Mat *mask = 0);
-	int setTarget(const IplImage *target);
+        int setModel(const cv::Mat im1, const cv::Mat mask = cv::Mat());
+	int setTarget(cv::Mat target);
 	void iterate();
 	void smooth(float amount, float threshold);
 	void run(int nbIter=3, float smooth_amount=2.5, float smooth_threshold=.0001);
@@ -137,5 +137,6 @@ protected:
 };
 
 void scale_save(const char *fn, cv::Mat im, double scale=-1, double shift=-1);
+void save_proba(const char *fn, cv::Mat im);
 
 #endif

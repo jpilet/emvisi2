@@ -28,7 +28,7 @@
 #define FWNCC_H
 
 #include <pmmintrin.h>
-#include <cv.h>
+#include <opencv2/opencv.hpp>
 
 typedef double integral_type;
 
@@ -39,11 +39,11 @@ public:
 
 
 	// these are single channel images only.
-	void setModel(const IplImage *b, const IplImage *mask=0);
-	void setImage(IplImage *a);
+	void setModel(const cv::Mat b, const cv::Mat mask = cv::Mat());
+	void setImage(cv::Mat a);
 
-	void computeNcc(int windowSize, IplImage *dst, IplImage *sumvar=0);
-	void diffNcc(int windowSize, const IplImage *da, IplImage *diff);
+	void computeNcc(int windowSize, cv::Mat dst, cv::Mat sumvar = cv::Mat());
+	void diffNcc(int windowSize, const cv::Mat da, cv::Mat diff);
 
 protected:
 	struct CSum {
@@ -112,12 +112,12 @@ protected:
 	CSum *integral;
 	CSumf *ncc;
 	DSum *dint;
-	IplImage *a, *b;
-	IplImage *mask;
-	IplImage *mask_integral;
+        cv::Mat a, b;
+        cv::Mat mask;
+        cv::Mat mask_integral;
 
-	void computeNcc_mask(int windowSize, IplImage *dst, IplImage *sumvar=0);
-	void computeNcc_nomask(int windowSize, IplImage *dst, IplImage *sumvar=0);
+	void computeNcc_mask(int windowSize, cv::Mat dst, cv::Mat sumvar = cv::Mat());
+	void computeNcc_nomask(int windowSize, cv::Mat dst, cv::Mat sumvar = cv::Mat());
 };
 
 
@@ -127,32 +127,32 @@ public:
 	~FNccMC();
 
 	// these are multi-channels images.
-	void setModel(const IplImage *b, const IplImage *mask=0);
-	void setImage(const IplImage *a);
+	void setModel(const cv::Mat b, const cv::Mat mask = cv::Mat());
+	void setImage(const cv::Mat a);
 
-	void computeNcc(int windowSize, IplImage *dst, IplImage *sumvar=0);
-	void diffNcc(int windowSize, const IplImage *da, IplImage *diff);
+	void computeNcc(int windowSize, cv::Mat dst, cv::Mat sumvar = cv::Mat());
+	void diffNcc(int windowSize, const cv::Mat da, cv::Mat diff);
 
 	static const int default_win_size=11;
 
-	void computeNcc(IplImage *dst, IplImage *sumvar=0) {
+	void computeNcc(cv::Mat dst, cv::Mat sumvar = cv::Mat()) {
 		computeNcc(default_win_size, dst, sumvar);
 	}
-	void diffNcc(const IplImage *da, IplImage *diff) {
+	void diffNcc(const cv::Mat da, cv::Mat diff) {
 		diffNcc(default_win_size, da, diff);
 	}
 
 private:
-	IplImage *a[3];
-	IplImage *b[3];
-	IplImage *tmp_dst[3];
-	IplImage *tmp_sumvar[3];
-	IplImage *tmp_flt1[3];
-	IplImage *tmp_flt2[3];
+	cv::Mat a[3];
+	cv::Mat b[3];
+	cv::Mat tmp_dst[3];
+	cv::Mat tmp_sumvar[3];
+	cv::Mat tmp_flt1[3];
+	cv::Mat tmp_flt2[3];
 
 	FNcc ncc[3];
 
-	void merge(IplImage **src, IplImage *dst);
+	void merge(cv::Mat *src, cv::Mat dst);
 };
 
 
@@ -162,9 +162,9 @@ public:
 	~FWNcc();
 
 
-	void prepare(const IplImage *a, const IplImage *b, const IplImage *w);
+	void prepare(cv::Mat a, cv::Mat b, cv::Mat w);
 
-	void compute(int windowSize, IplImage *dst);
+	void compute(int windowSize, cv::Mat dst);
 
 protected:
 
@@ -172,7 +172,7 @@ protected:
 	void fetchRect(int x1, int y1, int x2, int y2, float s[NSUMS]);
 	float correl(int x1, int y1, int x2, int y2, int cx, int cy);
 	static void correl(float area, float s[NSUMS], float *cw, float *cx);
-	IplImage *integral;
+	cv::Mat integral;
 };
 
 #endif

@@ -22,56 +22,57 @@
    Subtraction Robust to Sudden Illumination Changes".
 */
 #include <iostream>
-#include <cv.h>
+#include <opencv2/opencv.hpp>
 #include "fwncc.h"
-#include <highgui.h>
+#include <opencv2/highgui.hpp>
 #include "emvisi2.h"
 #include "growmat.h"
 
 using namespace std;
+using namespace cv;
 
-int fillMatrix(IplImage *ncc, IplImage *var, IplImage *visibility, IplImage *mask, CvGrowMat *mat)
+int fillMatrix(cv::Mat ncc, cv::Mat var, cv::Mat visibility, cv::Mat mask, CvGrowMat *mat)
 {
 	int nb=0;
-	assert(visibility->nChannels==1);
-	//assert(im->nChannels==3);
-	//assert(im->width == visibility->width && im->height == visibility->height);
-	assert(mask==0 || (mask->width == visibility->width && mask->height == visibility->height));
-	assert(mask==0 || (mask->nChannels==1));
+	assert(visibility.channels()==1);
+	//assert(im.channels()==3);
+	//assert(im.cols == visibility.cols && im.rows == visibility.rows);
+	assert(mask.empty() || (mask.cols == visibility.cols && mask.rows == visibility.rows));
+	assert(mask.empty() || (mask.channels()==1));
 
-	for (int y=0; y<ncc->height; y++) {
-		for (int x=0; x<ncc->width; x++) {
-			if ((mask==0) || (CV_IMAGE_ELEM(mask, unsigned char, y,x)>128)) {
+	for (int y=0; y<ncc.rows; y++) {
+		for (int x=0; x<ncc.cols; x++) {
+			if (mask.empty() || (mask.at<unsigned char>(y,x)>128)) {
 				int n = mat->height;
 				mat->resize(n+1,3);
 				nb++;
-				CV_MAT_ELEM(*mat, float, n, 0) = CV_IMAGE_ELEM(ncc, float, y, x);
-				CV_MAT_ELEM(*mat, float, n, 1) = CV_IMAGE_ELEM(var, float, y, x);
-				CV_MAT_ELEM(*mat, float, n, 2) = CV_IMAGE_ELEM(visibility, unsigned char, y, x);
+				CV_MAT_ELEM(*mat, float, n, 0) = ncc.at<float>(y, x);
+				CV_MAT_ELEM(*mat, float, n, 1) = var.at<float>(y, x);
+				CV_MAT_ELEM(*mat, float, n, 2) = visibility.at<unsigned char>(y, x);
 			}
 		}
 	}
-	cout << 100.0f*nb / ((float) ncc->width*ncc->height) << "% inside image mask.\n";
+	cout << 100.0f*nb / ((float) ncc.cols*ncc.rows) << "% inside image mask.\n";
 	return nb;
 }
 
-int buildHisto(IplImage *ncc, IplImage *var, IplImage *visibility, IplImage *mask, NccHisto &f, NccHisto &g)
+int buildHisto(cv::Mat ncc, cv::Mat var, cv::Mat visibility, cv::Mat mask, NccHisto &f, NccHisto &g)
 {
 	int nb=0;
-	assert(visibility->nChannels==1);
-	//assert(im->nChannels==3);
-	//assert(im->width == visibility->width && im->height == visibility->height);
-	assert(mask==0 || (mask->width == visibility->width && mask->height == visibility->height));
-	assert(mask==0 || (mask->nChannels==1));
+	assert(visibility.channels()==1);
+	//assert(im.channels()==3);
+	//assert(im.cols == visibility.cols && im.rows == visibility.rows);
+	assert(mask.empty() || (mask.cols == visibility.cols && mask.rows == visibility.rows));
+	assert(mask.empty() || (mask.channels()==1));
 
 
-	for (int y=0; y<ncc->height; y++) {
-		for (int x=0; x<ncc->width; x++) {
-			if ((mask==0) || (CV_IMAGE_ELEM(mask, unsigned char, y,x)>128)) {
+	for (int y=0; y<ncc.rows; y++) {
+		for (int x=0; x<ncc.cols; x++) {
+			if ((mask.empty()) || (mask.at<unsigned char>(y, x)>128)) {
 				nb++;
-				float c = CV_IMAGE_ELEM(ncc, float, y, x);
-				float v = CV_IMAGE_ELEM(var, float, y, x);
-				if (CV_IMAGE_ELEM(visibility, unsigned char, y, x) > 128) {
+				float c = ncc.at<float>(y,x);
+				float v = var.at<float>(y,x);
+				if (visibility.at<unsigned char>(y, x) > 128) {
 					f.addElem(c,v,1);
 				} else {
 					g.addElem(c,v,1);
@@ -81,7 +82,7 @@ int buildHisto(IplImage *ncc, IplImage *var, IplImage *visibility, IplImage *mas
 	}
 
 
-	cout << 100.0f*nb / ((float) ncc->width*ncc->height) << "% inside image mask.\n";
+	cout << 100.0f*nb / ((float) ncc.cols*ncc.rows) << "% inside image mask.\n";
 	return nb;
 }
 
@@ -92,10 +93,10 @@ void save_mat(float *f, int width, int height, const char *filename)
 	CvGrowMat::saveMat(&m, filename);
 }
 
-CvImage loadIm(const char *fn, int c)
+cv::Mat loadIm(const char *fn, int c)
 {
-	CvImage im(cvLoadImage(fn,c));
-	if (!im.is_valid()) {
+	Mat im(imread(fn,c));
+	if (im.empty()) {
 		cerr << fn << ": can't load image.\n";
 		exit(-1);
 	}
@@ -120,15 +121,15 @@ int main(int argc, char **argv)
 	h.initEmpty();
 	for (int i=1; i<argc; i+=4) {
 
-		CvImage model = loadIm(argv[i],0);
-		CvImage target = loadIm(argv[i+1],0);
-		CvImage visibility = loadIm(argv[i+2],0);
-		CvImage mask(cvLoadImage(argv[i+3], 0));
+		Mat model = loadIm(argv[i],0);
+		Mat target = loadIm(argv[i+1],0);
+		Mat visibility = loadIm(argv[i+2],0);
+		Mat mask(imread(argv[i+3], 0));
 
 		fncc.setModel(model, mask);
 		fncc.setImage(target);
-		CvImage ncc(cvGetSize(target), IPL_DEPTH_32F, 1);
-		CvImage var(cvGetSize(target), IPL_DEPTH_32F, 1);
+		Mat ncc(target.size(), CV_32FC1);
+		Mat var(target.size(), CV_32FC1);
 
 		fncc.computeNcc(EMVisi2::ncc_size, ncc, var);
 

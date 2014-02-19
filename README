@@ -1,0 +1,25 @@
+
+This code illustrates the following paper:
+
+	Making Background Subtraction Robust to Sudden Illumination Changes,
+	Julien Pilet, Christoph Strecha and Pascal Fua, 
+       	European Conference on Computer Vision, Marseille, France, October 2008.
+	
+The package contains two programs: emvisi2 and learn. "emvisi2" segments
+foreground and background. "learn" takes a set of background/input/ground truth
+triplets to estimate the behavior of NCC on your data. The resulting histograms
+are saved in several files, including ncc_proba.cpp which emvisi2 uses.
+
+A default ncc_proba.cpp is provided. Expect performance improvement if one
+adapted to your own data.
+
+You can optionally smooth the result with a graphcut. Have a look at the
+Makefile.
+
+If you have trouble compiling fwncc.cpp, try with the -msse2 compiler flag.
+
+Please respect the GPL terms.
+
+Good luck !
+Julien Pilet. November 2008.
+

@@ -45,7 +45,7 @@ static inline float exp_table(float f)
 			table[i] = exp(-(float)(range*i)/(float)n);
 		}
 	}
-	//assert(finite(f));
+	//assert(!isnan(f));
 	unsigned idx = (unsigned)(-f*(n/range) + .5f);
 	return table[(idx<n) ? idx : n-1];
 }
@@ -232,8 +232,8 @@ public:
 			+t14*sigma[2][2]
 			+t15+t15;
 
-		assert(finite(vsv));
-		assert(finite(one_over_sq_det));
+		assert(!isnan(vsv));
+		assert(!isnan(one_over_sq_det));
 		if (vsv<0) vsv=0;
 
 		// this constant is 1/(2Pi)^(3/2)
@@ -242,7 +242,7 @@ public:
 		float epsilon = 1e-30;
 		if (p<epsilon) p=epsilon;
 
-		assert(finite(p));
+		assert(!isnan(p));
 
 		if (p>1-epsilon) {
 			//std::cout << "Warning: clamping proba " << p << " to 1.\n";
@@ -324,7 +324,7 @@ public:
 
 		float det = inverse3x3(s,sigma);
 
-		if (!finite(det) || det<1e-5) {
+		if (!!isnan(det) || det<1e-5) {
 			sigma_computed=false;
 			n=0;
 			one_over_sq_det= 1;
@@ -335,7 +335,7 @@ public:
 			two_ln_sq_det = 2;
 		} else {
 			one_over_sq_det = 1/sqrtf(det);
-			assert(finite(one_over_sq_det));
+			assert(!isnan(one_over_sq_det));
 			two_ln_sq_det = 2*log(sqrtf(det));
 			sigma_computed=true;
 			n = new_n;
@@ -389,7 +389,7 @@ public:
 
 		float det = s*s*s;
 		one_over_sq_det = 1/sqrtf(det);
-		assert(finite(one_over_sq_det));
+		assert(!isnan(one_over_sq_det));
 		two_ln_sq_det = 2*log(sqrtf(det));
 		sigma_computed=true;
 		n = 0;

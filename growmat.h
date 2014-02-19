@@ -26,7 +26,7 @@
 #ifndef GROWMAT_H
 #define GROWMAT_H
 
-#include <cv.h>
+#include <opencv2/opencv.hpp>
 
 //! A dynamic size version of CvMat.
 class CvGrowMat : public CvMat {
