@@ -1,5 +1,5 @@
 #include "emvisi2.h"
-#include <opencv2/highgui.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 #include <sys/time.h>
 
