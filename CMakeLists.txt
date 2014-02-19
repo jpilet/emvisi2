@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 2.7)
 
 find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse3")
 
 add_library(emvisi2_lib
             emvisi2.h fwncc.h   growmat.h imstat.h

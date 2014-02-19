@@ -26,9 +26,10 @@
  * Packaged on Nov 2008
  */
 #include <iostream>
+#include <stdio.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/highgui.hpp>
+#include <opencv2/highgui/highgui.hpp>
 #include "emvisi2.h"
 #include "growmat.h"
 

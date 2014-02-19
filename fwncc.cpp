@@ -49,7 +49,7 @@ void FNcc::setModel(const cv::Mat b, const cv::Mat mask) {
         this->mask = mask;
 	if (!mask.empty()) {
 		mask_integral = cv::Mat(mask.rows+1, mask.cols+1, CV_32SC1);
-                mask_integral = 0;
+                mask_integral = cv::Scalar::all(0);
 		for (int y=0; y<mask.rows;y++) {
 			int *m = mask_integral.ptr<int>(y+1) + 1;
 			int *mup = mask_integral.ptr<int>(y) + 1;
@@ -509,7 +509,7 @@ void FWNcc::prepare(cv::Mat a, cv::Mat b, cv::Mat w) {
 	assert(b.depth() == 8);
 
 	integral = cv::Mat(a.rows + 1, NSUMS*(a.cols+1), CV_64FC1);
-        integral = 0;
+        integral = cv::Scalar::all(0);
 
 	for (int y=0; y<a.rows;y++) {
 
