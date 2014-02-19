@@ -5,8 +5,13 @@
 #include <list>
 #include <string>
 
+#include <boost/filesystem.hpp>
+using namespace boost::filesystem;
+
 using namespace cv;
 using namespace std;
+
+namespace {
 
 class Timer {
 public:
@@ -26,14 +31,27 @@ double Timer::duration() {
 
 void usage(char *str)
 {
-	cerr << "usage: " << str << " [-v] -b <background> <input frames>\n";
+	cerr << "usage: " << str << " [-v] [-d <destination folder>] -b <background> <input frames>\n";
 	cerr << "	use -v for more verbosity and more intermediate images saved.\n";
 	exit(-1);
 }
 
-string destinationFilename(const string &a) {
-  return a + "_result.png";
+string destinationFilename(const string &a, const path &destinationFolder) {
+  return (destinationFolder / path(path(a).stem().string() + "_result.png")).string();
 }
+
+Mat loadImage(string path, int flag) {
+  Mat im = imread(path, flag);
+  if (im.empty()) {
+	  cerr << path << ": can't load image.\n";
+  }
+  Mat smaller;
+  pyrDown(im, smaller);
+  pyrDown(smaller, smaller);
+  return smaller;
+}
+ 
+}  // namespace
 
 int main(int argc, char *argv[])
 {
@@ -41,20 +59,28 @@ int main(int argc, char *argv[])
   int nim=0;
   cv::Mat background;
   list<string> images;
+  path destinationFolder("out");
 
   // parse command line
   for (int narg=1; narg<argc; ++narg) {
     if (narg + 1 < argc) {
       if (strcmp(argv[narg], "-b") == 0) {
-        background = imread(argv[narg+1], -1);
+        background = loadImage(argv[narg+1], -1);
         if (background.empty()) {
-          cerr << argv[narg+1] << ": can't load background.\n";
           return 1;
         }
         narg++;
         continue;
+      } else if (strcmp(argv[narg], "-d") == 0) {
+        destinationFolder = path(argv[narg+1]);
+        narg++;
+	continue;
       }
     }
+
+    try {
+      create_directory(destinationFolder);
+    } catch (filesystem_error e) { }
 
     if (strcmp(argv[narg],"-v")==0) {
       emv.save_images=true;
@@ -84,7 +110,7 @@ int main(int argc, char *argv[])
 
   for (list<string>::const_iterator it = images.begin();
        it != images.end(); ++it) {
-    Mat frame = imread(*it, -1);
+    Mat frame = loadImage(*it, -1);
     if (frame.empty()) {
       cerr << *it << ": can't load frame, skipping.\n";
       continue;
@@ -94,11 +120,11 @@ int main(int argc, char *argv[])
     timer.start();
 
     emv.setTarget(frame);
-    emv.run(5, 0);
+    emv.run(8, 0);
 
     cout << "computed in " << timer.duration() << " ms.\n";
 
-    save_proba(destinationFilename(*it).c_str(),emv.proba);
+    save_proba(destinationFilename(*it, destinationFolder).c_str(),emv.proba);
   }
   return 0;
 }
