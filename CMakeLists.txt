@@ -10,5 +10,8 @@ target_link_libraries(emvisi2_lib ${OpenCV_LIBS})
 add_executable(emvisi2 emvisi2_test.cpp)
 target_link_libraries(emvisi2 emvisi2_lib)
 
+add_executable(emvisi2_video emvisi2_video.cpp)
+target_link_libraries(emvisi2_video emvisi2_lib)
+
 add_executable(learn learn.cpp)
 target_link_libraries(learn emvisi2_lib)
