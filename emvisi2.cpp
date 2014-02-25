@@ -85,10 +85,10 @@ static void a_save(const char *fn, cv::Mat im) {
 }
 void save_proba(const char *fn, cv::Mat im) {
 	char str[1024];
-	snprintf(str,1024,"log_%s",fn);
+	snprintf(str,1024,"%s_log.png",fn);
 	scale_save(fn, im, -1, -1);
 	log_save(str,im);
-	snprintf(str,1024,"exp_%s",fn);
+	snprintf(str,1024,"%s_exp.png",fn);
 	a_save(str,im);
 }
 
