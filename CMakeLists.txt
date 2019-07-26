@@ -8,7 +8,7 @@ find_package(Boost COMPONENTS system filesystem REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse3")
 
 add_library(emvisi2_lib
-            emvisi2.h fwncc.h   growmat.h imstat.h
+            emvisi2.h fwncc.h   growmat.h imstat.h gcgraph.hpp
             emvisi2.cpp fwncc.cpp     growmat.cpp        ncc_proba.cpp)
 target_link_libraries(emvisi2_lib ${OpenCV_LIBS})
 

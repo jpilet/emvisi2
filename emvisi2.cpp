@@ -27,22 +27,29 @@
  */
 #include <iostream>
 #include <stdio.h>
+#include <vector>
 #include <opencv2/opencv.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include "emvisi2.h"
 #include "growmat.h"
 
-// To enable graphcut support, 
-//  - download Yuri Boykov's implementation.
-//    http://www.adastral.ucl.ac.uk/~vladkolm/software/maxflow-v3.0.src.tar.gz
-//  - edit the Makefile
+#include "gcgraph.hpp"
+
+typedef cv::detail::GCGraph<float> FGraph;
 
 using namespace std;
 using namespace cv;
 
 extern const float ncc_proba_h[256];
 extern const float ncc_proba_v[256];
+
+namespace {
+struct Region {
+  cv::Rect rect;
+  unsigned char value;
+};
+}
 
 EMVisi2::EMVisi2() {
 	save_images=false;
@@ -389,24 +396,13 @@ int EMVisi2::setTarget(cv::Mat target)
 	return 0;
 }
 
-#ifdef WITH_GRAPHCUT
-
-#include <vector>
-#include "graph.h"
-#include "graph.hpp"
-#include "maxflow.hpp"
-
-using namespace std;
-typedef Graph<float, float, float> FGraph;
-
 /*!
   Tags connected '0' regions with an id (1-254)
   return total area
 */
-static double connected_regions(cv::Mat *mask, vector<CvConnectedComp> &regions)
+static double connected_regions(const cv::Mat& mask, vector<Region> &regions)
 {
-	assert(mask.channels() == 1);
-	assert(mask->depth == IPL_DEPTH_8U);
+	assert(mask.type() == CV_8UC1);
 
 	regions.clear();
 	regions.reserve(254);
@@ -415,17 +411,24 @@ static double connected_regions(cv::Mat *mask, vector<CvConnectedComp> &regions)
 	double area = 0;
 
 	for (int y=0; y<mask.rows; y++) {
-		unsigned char *m = &CV_IMAGE_ELEM(mask, unsigned char, y, 0);
+		const unsigned char *m = mask.ptr<unsigned char>(y);
 
 		for (int x=0; x<mask.cols; x++) {
 			if (m[x]==0) {
 				CvConnectedComp conn;
 
-				cvFloodFill(mask, cvPoint(x,y), cvScalarAll(region), cvScalarAll(0), cvScalarAll(0),
-						&conn, 8+CV_FLOODFILL_FIXED_RANGE );
+                                Region reg;
+                                reg.value = region;
+
+                                cv::floodFill(mask,
+                                              cv::Point(x,y), // seed point
+                                              cv::Scalar::all(region), // new value
+                                              &reg.rect, // bounding box
+                                              cv::Scalar::all(0), // loDiff
+                                              cv::Scalar::all(0), // upDiff
+                                              8 + cv::FLOODFILL_FIXED_RANGE );
 				area += conn.area;
-				conn.value.val[0] = region;
-				regions.push_back(conn);
+				regions.push_back(reg);
 
 				region++;
 				if (region==255) region=1;
@@ -445,21 +448,25 @@ void EMVisi2::smooth(float amount, float threshold) {
 	const cv::Mat wa = proba;
 
 	// Threshold proba image
-	cv::Mat gc_mask(cvGetSize(proba), IPL_DEPTH_8U, 1);
-	cvSet(gc_mask, cvScalarAll(255));
+	cv::Mat gc_mask(proba.size(), CV_8UC1);
+	gc_mask = 255;
 
 	// find pixels on which graph-cut should be applied
-	for (int y=1; y<proba.height()-1; y++) {
-		float *p = (float *) proba.roi_row(y); 
-		unsigned char *m = (unsigned char*) gc_mask.roi_row(y);
+	for (int y=1; y<proba.rows-1; y++) {
+		float *p = proba.ptr<float>(y);
+		float *p_up = proba.ptr<float>(y - 1);
+		unsigned char *m = gc_mask.ptr<unsigned char>(y);
+		unsigned char *m_up = gc_mask.ptr<unsigned char>(y - 1);
+		unsigned char *m_down = gc_mask.ptr<unsigned char>(y + 1);
 		unsigned char *im = 0;
-		if (mask.is_valid())
-			im = mask.roi_row(y);
+		if (!mask.empty()) {
+			im = mask.ptr<unsigned char>(y);
+                }
 
-		for (int x=1;x<proba.width()-1; x++)
+		for (int x=1;x<proba.cols-1; x++)
 			if ((im==0 || im[x]) // within mask and..
 					&& (((p[x]>threshold) && (p[x] < (1-threshold))) // not very confident..
-					|| ( fabs(p[x-1]-p[x])>.3) || (fabs(p[x-proba.step()]-p[x])>.3)	// transition
+					|| ( fabs(p[x-1]-p[x])>.3) || (fabs(p_up[x]-p[x])>.3)	// transition
 					)) {
 				m[x]=0;
 				/*
@@ -470,118 +477,113 @@ void EMVisi2::smooth(float amount, float threshold) {
 				*/
 				m[x-1]=0;
 				m[x+1]=0;
-				m[x+mask.step()]=0;
-				m[x-mask.step()]=0;
+				m_up[x]=0;
+				m_down[x]=0;
 
 				// diag
-				m[x+mask.step()+1]=0;
-				m[x-mask.step()+1]=0;
-				m[x+mask.step()-1]=0;
-				m[x-mask.step()-1]=0;
+				m_down[x+1]=0;
+				m_up[x+1]=0;
+				m_down[x-1]=0;
+				m_up[x-1]=0;
 			}
 	}
 
 	// segment connected uncertain areas
-	vector<CvConnectedComp> regions;
+	vector<Region> regions;
 	connected_regions(gc_mask, regions);
 	if (save_images) {
-		cv::Mat imreg(cvGetSize(gc_mask), IPL_DEPTH_8U, 3);
+		cv::Mat imreg(gc_mask.size(), CV_8UC3);
 
-		CvMat *lut = cvCreateMat(1,256, CV_8UC3);
-		CvRNG rng = cvRNG();
-		cvRandArr(&rng, lut, CV_RAND_UNI, cvScalarAll(0), cvScalarAll(255));
-		unsigned char *c = lut->data.ptr;
-		//c[0] = c[1] = c[2] = 0;
+                cv::Mat lut(1, 256, CV_8UC3);
+                cv::RNG rng;
+                rng.fill(lut, cv::RNG::UNIFORM, 
+                         cv::Scalar::all(0), cv::Scalar::all(255));
+		unsigned char *c = lut.ptr<unsigned char>();
 		c[255*3] = c[255*3+1] = c[255*3+2] = 0;
-		for (int y=0; y<imreg.height(); y++) {
-			unsigned char *dst = imreg.roi_row(y);
-			unsigned char *src = gc_mask.roi_row(y);
-			for (int x=0; x<imreg.width(); x++) 
+		for (int y=0; y<imreg.rows; y++) {
+			unsigned char *dst = imreg.ptr<unsigned char>(y);
+			unsigned char *src = gc_mask.ptr<unsigned char>(y);
+			for (int x=0; x<imreg.cols; x++) 
 				for (int i=0; i<3; i++) 
 					dst[x*3+i] = c[src[x]*3+i];
 		}
-		cvReleaseMat(&lut);
-		cvSaveImage("regions.png", imreg);
+                cv::imwrite("regions.png", imreg);
 	}
 
 	// allocate the graph. Note: worst case memory scenario.
-	int n_nodes= gc_mask.width()*gc_mask.height();
+	int n_nodes= gc_mask.cols * gc_mask.rows;
 	int n_edges = 2*((wa.cols)*(wa.rows-1) + (wa.cols-1)*wa.rows);
-	FGraph *g = new FGraph(n_nodes, n_edges, display_err);
+	FGraph g(n_nodes, n_edges);
 	int *nodesid = new int[n_nodes];
 
 	// try to run graphcut on all regions
 	for (unsigned i=0; i<regions.size(); i++) {
-
-		CvConnectedComp &r = regions[i];
+                cv::Rect &rect = regions[i].rect;
 
 		/*
-		cout << "Region " << i << ": area=" << r.area << ", " 
-			<< r.rect.width << "x" << r.rect.height << endl;
+		cout << "Region " << i << ": " 
+			<< rect.width << "x" << rect.height << endl;
 		*/
 
-		g->reset();
-		//g->add_node((int)r.area);
-		g->add_node(r.rect.width * r.rect.height);
-		for (int i=0; i<r.rect.width+1;i++) nodesid[i]=-1;
+		g.create(rect.width * rect.height,
+                         5 * rect.width * rect.height);
+		for (int i=0; i<rect.width+1;i++) nodesid[i]=-1;
 
-		int next_node = 0;
 
-		unsigned rval = (unsigned)r.value.val[0];
+		unsigned char rval = regions[i].value;
 
-		for (int y=r.rect.y; y<r.rect.y+r.rect.height; y++) {
-			unsigned char *m = (unsigned char*) gc_mask.roi_row(y);
-			int *row_id = nodesid + (1+y-r.rect.y)*(r.rect.width+1)+1;
+		for (int y=rect.y; y<rect.y+rect.height; y++) {
+			unsigned char *m = gc_mask.ptr<unsigned char>(y);
+			int *row_id = nodesid + (1+y-rect.y)*(rect.width+1)+1;
 			row_id[-1]=-1;
 
 			const float c = amount;
 
-			float *proba_l = (float *)proba.roi_row(y);
-			float *visi_proba_l = (float *)visi_proba.roi_row(y);
+			float *proba_l = proba.ptr<float>(y);
+			float *visi_proba_l = visi_proba.ptr<float>(y);
 
-			for (int x=r.rect.x; x<r.rect.x+r.rect.width; x++) {
+			for (int x=rect.x; x<rect.x+rect.width; x++) {
 				if (m[x] == rval) {
 					// add a new node
+                                        int next_node = g.addVtx();
 					*row_id = next_node;
 
 					// terminal weights
 					float wap = proba_l[x];
 					float vp = visi_proba_l[x];
-					g->add_tweights(next_node, 
+					g.addTermWeights(next_node, 
 							//-logf(PF*wap), -logf((1-PF)*(1-wap)));
 							-log(PF*vp), -log((1-PF)*(vp/wap - vp)));
 
 					// fill connectivity edges ..
 
 					// .. up ?
-					int up_id = row_id[-(r.rect.width+1)]; 
+					int up_id = row_id[-(rect.width+1)]; 
 					if (up_id>=0) {
 						// the node exists. Link it.
-						g->add_edge(next_node, up_id, c, c);
+						g.addEdges(next_node, up_id, c, c);
 					}
 
 					// .. left ?
 					int left_id = row_id[-1];
 					if (left_id >= 0) {
 						// the node exists. Link it.
-						g->add_edge(next_node, left_id, c, c);
+						g.addEdges(next_node, left_id, c, c);
 					}
 
 					// .. up+left ?
-					int upleft_id = row_id[-(r.rect.width+1)-1];
+					int upleft_id = row_id[-(rect.width+1)-1];
 					if (upleft_id >= 0) {
 						// the node exists. Link it.
-						g->add_edge(next_node, upleft_id, c, c);
+						g.addEdges(next_node, upleft_id, c, c);
 					}
 
 					// .. up+right ?
-					int upright_id = row_id[-(r.rect.width+1)+1];
+					int upright_id = row_id[-(rect.width+1)+1];
 					if (upright_id >= 0) {
 						// the node exists. Link it.
-						g->add_edge(next_node, upright_id, c, c);
+						g.addEdges(next_node, upright_id, c, c);
 					}
-
-					next_node++;
 				} else {
 					*row_id = -1;
 				}
@@ -590,29 +592,23 @@ void EMVisi2::smooth(float amount, float threshold) {
 		}
 
 		// solve maxflow
-		g->maxflow();
+		g.maxFlow();
 
 		// write result back
-		for (int y=r.rect.y; y<r.rect.y+r.rect.height; y++) {
-			float *p = (float *)proba.roi_row(y);
-			int *row_id = nodesid + (1+y-r.rect.y)*(r.rect.width+1)+1;
+		for (int y=rect.y; y<rect.y+rect.height; y++) {
+			float *p = proba.ptr<float>(y);
+			int *row_id = nodesid + (1+y-rect.y)*(rect.width+1)+1;
 
-			for (int x=r.rect.x; x<r.rect.x+r.rect.width; x++) {
+			for (int x=rect.x; x<rect.x+rect.width; x++) {
 				if (*row_id >= 0) {
-					p[x] = (g->what_segment(*row_id) == FGraph::SOURCE ? 0 : 1);
+					p[x] = !g.inSourceSegment(*row_id);
 				}
 				row_id++;
 			}
 		}
 	}
 	delete[] nodesid;
-	delete g;
 }
-#else
-void EMVisi2::smooth(float, float) {
-}
-#endif
-
 
 NccHisto::NccHisto() : lut(0), deleteme(0) {
 }

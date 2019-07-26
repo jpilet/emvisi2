@@ -57,6 +57,7 @@ int main(int argc, char *argv[])
 {
   EMVisi2 emv;
   int nim=0;
+  float smooth = 0.0f;
   cv::Mat background;
   list<string> images;
   path destinationFolder("out");
@@ -84,6 +85,8 @@ int main(int argc, char *argv[])
 
     if (strcmp(argv[narg],"-v")==0) {
       emv.save_images=true;
+    } else if (strcmp(argv[narg],"-s")==0) {
+      smooth = 0.001f;
     } else if (argv[narg][0] == '-') {
       usage(argv[0]);
     } else {
@@ -120,7 +123,7 @@ int main(int argc, char *argv[])
     timer.start();
 
     emv.setTarget(frame);
-    emv.run(8, 0);
+    emv.run(8, smooth);
 
     cout << "computed in " << timer.duration() << " ms.\n";
 

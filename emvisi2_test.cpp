@@ -87,16 +87,12 @@ int main(int argc, char *argv[])
 
 	float it_duration = iterations.duration();
 
-#ifdef WITH_GRAPHCUT
 	emv.smooth(2.4, 0.001);
 	float gc_duration = iterations.duration() - it_duration;
-#endif
 
 	cout << niter << " iterations computed in " << it_duration << " ms. (avg " 
 		<< it_duration / (float)niter << " ms per iteration)\n";
-#ifdef WITH_GRAPHCUT
 	cout << "graph cut computed in " << gc_duration << " ms.\n";
-#endif
 
 	float duration = timer.duration();
 	cout << "       frame computed in " << duration << " ms ("
