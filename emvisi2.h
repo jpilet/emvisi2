@@ -54,7 +54,7 @@ public:
 	// these contain the number of bins for the NCC histograms.
 	// the values 15,15 work for the distributed ones.
 	// if you change these values, you have to rebuild the histograms.
-	static const int NTEX=15;
+	static const int NTEX=5;
 	static const int NCORR=15;
 
 	int tex_idx(float var) {
@@ -100,7 +100,7 @@ public:
 
 	bool recycle;
 	float PF;
-	static const int ncc_size = 25;
+	static const int ncc_size = 15;
 
 	cv::Mat prod_f, prod_g;
 
@@ -125,8 +125,8 @@ protected:
 
 	cv::Mat dL;
 
-#define NB_VISI_GAUSSIANS 2
-#define NB_OCCL_GAUSSIANS 2 
+#define NB_VISI_GAUSSIANS 3
+#define NB_OCCL_GAUSSIANS 3 
 #define NB_GAUSSIANS (NB_VISI_GAUSSIANS+NB_OCCL_GAUSSIANS)
 
 	MultiGaussian3<float> visi_g[NB_VISI_GAUSSIANS];
