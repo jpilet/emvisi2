@@ -232,6 +232,12 @@ public:
 			+t14*sigma[2][2]
 			+t15+t15;
 
+		float epsilon = 1e-30;
+
+                if (isnan(vsv)) {
+                  return epsilon;
+                }
+
 		assert(!isnan(vsv));
 		assert(!isnan(one_over_sq_det));
 		if (vsv<0) vsv=0;
@@ -239,7 +245,6 @@ public:
 		// this constant is 1/(2Pi)^(3/2)
 		float p = .0634936359342409f*one_over_sq_det*exp_table(-.5f*vsv);
 
-		float epsilon = 1e-30;
 		if (p<epsilon) p=epsilon;
 
 		assert(!isnan(p));

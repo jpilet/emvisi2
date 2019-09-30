@@ -61,6 +61,7 @@ int main(int argc, char *argv[])
   cv::Mat background;
   list<string> images;
   path destinationFolder("out");
+  bool window = false;
 
   // parse command line
   for (int narg=1; narg<argc; ++narg) {
@@ -85,6 +86,8 @@ int main(int argc, char *argv[])
 
     if (strcmp(argv[narg],"-v")==0) {
       emv.save_images=true;
+    } else if (strcmp(argv[narg],"-w")==0) {
+      window = true;
     } else if (strcmp(argv[narg],"-s")==0) {
       smooth = 0.001f;
     } else if (argv[narg][0] == '-') {
@@ -111,6 +114,8 @@ int main(int argc, char *argv[])
 
   cout << "done in " << timer.duration() << " ms.\n";
 
+  int playing = 0;
+
   for (list<string>::const_iterator it = images.begin();
        it != images.end(); ++it) {
     Mat frame = loadImage(*it, -1);
@@ -128,6 +133,21 @@ int main(int argc, char *argv[])
     cout << "computed in " << timer.duration() << " ms.\n";
 
     save_proba(destinationFilename(*it, destinationFolder).c_str(),emv.proba);
+
+    if (window) {
+      std::vector<cv::Mat> channels;
+      cv::split(frame, channels);
+      emv.proba.convertTo(channels[1], CV_8UC1, 255, 0);
+      cv::Mat result;
+      cv::merge(channels, result);
+
+      imshow("Segmentation", result);
+      int k = cv::waitKey(playing);
+      switch (k) {
+        case ' ': playing = (playing + 1) & 1; break;
+        case 'p': --it; --it; break;
+      }
+    }
   }
   return 0;
 }

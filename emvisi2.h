@@ -90,7 +90,7 @@ public:
 	bool init();
         int setModel(const cv::Mat im1, const cv::Mat mask = cv::Mat());
 	int setTarget(cv::Mat target);
-	void iterate();
+	bool iterate();
 	void smooth(float amount, float threshold);
 	void run(int nbIter=3, float smooth_amount=2.5, float smooth_threshold=.0001);
 	float process_pixel(const float *rgb, const float *frgb, const float dl, const float nccv, const float ncch, float *proba, float *visi_proba);
