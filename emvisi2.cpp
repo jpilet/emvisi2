@@ -105,7 +105,9 @@ void EMVisi2::run(int nbIter, float smooth_amount, float smooth_threshold)
 		reset_gaussians();
 	}
 	for (int i=0;i<nbIter;i++) {
-		iterate();
+		if (!iterate()) {
+                  break;
+                }
 	}
 	if (smooth_amount>0)
 		smooth(smooth_amount, smooth_threshold);
@@ -127,7 +129,7 @@ void EMVisi2::reset_gaussians()
 		weights[i] = 1.0f/(NB_GAUSSIANS+1);
 }
 
-void EMVisi2::iterate()
+bool EMVisi2::iterate()
 {
 	char str[256];
 	uniform_resp=0;
@@ -171,12 +173,20 @@ void EMVisi2::iterate()
 	for (int i=0; i<NB_VISI_GAUSSIANS; i++) {
 		visi_g[i].compute_sigma();
 		totN += visi_g[i].n;
+                if (visi_g[i].n < 1e-2f) {
+                  recycle = false;
+                  return false;
+                }
 	}
 
 	for (int i=0; i<NB_OCCL_GAUSSIANS; i++) {
 		occl_g[i].compute_sigma();
 		totN += occl_g[i].n;
-	}
+                if (occl_g[i].n < 1e-2f) {
+                  recycle = false;
+                  return false;
+                }
+        }
 
 	totN += uniform_resp;
 	weights[NB_GAUSSIANS] = uniform_resp/totN;
@@ -199,6 +209,7 @@ void EMVisi2::iterate()
 		sprintf(str, "proba%02d.png", iteration );
 		scale_save(str, proba, -1, -1);
 	}
+        return true;
 }
 
 float EMVisi2::process_pixel(const float *rgb, const float *frgb, const float dl, const float nccv, const float ncch, float *proba, float *visi_proba)
@@ -511,7 +522,7 @@ void EMVisi2::smooth(float amount, float threshold) {
 	}
 
 	// allocate the graph. Note: worst case memory scenario.
-	int n_nodes= gc_mask.cols * gc_mask.rows;
+	int n_nodes= (gc_mask.cols + 2) * (gc_mask.rows + 2);
 	int n_edges = 2*((wa.cols)*(wa.rows-1) + (wa.cols-1)*wa.rows);
 	FGraph g(n_nodes, n_edges);
 	int *nodesid = new int[n_nodes];
@@ -546,6 +557,8 @@ void EMVisi2::smooth(float amount, float threshold) {
 				if (m[x] == rval) {
 					// add a new node
                                         int next_node = g.addVtx();
+                                        assert(row_id >= nodesid);
+                                        assert(row_id < nodesid + n_nodes);
 					*row_id = next_node;
 
 					// terminal weights
@@ -601,7 +614,7 @@ void EMVisi2::smooth(float amount, float threshold) {
 
 			for (int x=rect.x; x<rect.x+rect.width; x++) {
 				if (*row_id >= 0) {
-					p[x] = !g.inSourceSegment(*row_id);
+					p[x] = (g.inSourceSegment(*row_id) ? 0 : 1);
 				}
 				row_id++;
 			}
