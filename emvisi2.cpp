@@ -360,15 +360,15 @@ int EMVisi2::setTarget(cv::Mat target)
 					table[i][j]=0;
 					dtable[i][j]=1e-10;
 				} else {
-					table[i][j] = (180.0/M_PI)*atan2(i+1,j+1);
-					dtable[i][j] = (180.0/M_PI)/((i+1) + (1 + (j+1)*(j+1)/(i+1)/(i+1)));
+					//table[i][j] = (180.0/M_PI)*atan2(i+1,j+1);
+					//dtable[i][j] = (180.0/M_PI)/((i+1) + (1 + (j+1)*(j+1)/(i+1)/(i+1)));
 
 					// this also works
-					/*
+                                        
 					float s = 64;
-					table[i][j] = 45*(j+s)/(i+s);
-					dtable[i][j] = 45.0/(i+s);
-					*/
+                                        float a = 16;
+					table[i][j] = a*(j+s)/(i+s);
+					dtable[i][j] = a/(i+s);
 				}
 			}
 		}
